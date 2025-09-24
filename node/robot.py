@@ -57,7 +57,7 @@ class LineFollower:
         _, w = cv_image.shape[:2]
         if center is None:
             rospy.logwarn("Line center not found, stopping robot")
-            self.angular_speed = 0
+            self.angular_speed = 1
             self.linear_speed = 0
         else:
             error = (w / 2) - center
