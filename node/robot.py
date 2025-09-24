@@ -1,110 +1,119 @@
-#!/usr/bin/env python3
+#!/bin/env python3
 import rospy
-import cv2
-import numpy as np
+from cv_bridge import CvBridge, CvBridgeError
+import cv2 as cv
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
-from cv_bridge import CvBridge, CvBridgeError
 
-class ImageConverter:
+## Portion of the image (from the top) to ignore when detecting the line
+START_ROW = 0.80 #: The amount of the upper half that is ignored (%)
+
+## Proportional control gain for angular correction
+KP = 0.04
+
+## Base linear speed of the robot
+BASE_SPEED = 0.5
+
+##
+# @class LineFollower
+# @brief A ROS node class for line following using camera input.
+#
+# This class subscribes to the robot's camera feed, processes images to detect
+# the line position, computes control commands using a proportional controller,
+# and publishes velocity commands to the robot.
+#
+class LineFollower:
+    ##
+    # @brief Constructor: initializes subscribers, publishers, and state.
+    #
+    # Subscribes to the camera topic, publishes velocity commands, and sets
+    # up the CvBridge for converting ROS image messages to OpenCV images.
+    #
     def __init__(self):
-        # ROS publishers and subscribers
-        self.image_pub = rospy.Publisher("/enph353/camera/processed", Image, queue_size=10)
-        self.cmd_vel_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
-        self.image_sub = rospy.Subscriber("/enph353/camera/image_raw", Image, self.callback)
+        rospy.Subscriber('/rrbot/camera1/image_raw', Image, self.callback)
+        self.pub = rospy.Publisher('/cmd_vel', Twist,queue_size=1)
         self.bridge = CvBridge()
         self.move = Twist()
-
-        # Line-following parameters
-        self.width = 640
-        self.height = 480
-        self.threshold = 100
-        self.subtract_constant = 50
-        self.bottom_height = 100
-        self.radius = 10
-        self.last_center_x = self.width // 2
-        self.linear_speed = 0.5  # BASE_SPEED
+        self.linear_speed = BASE_SPEED
         self.angular_speed = 0
-        self.Kp = 0.04  # Proportional gain
+        
 
+    ##
+    # @brief Callback function for processing camera images.
+    #
+    # Converts ROS Image messages to OpenCV images, finds the line center,
+    # computes proportional control corrections, and publishes Twist commands.
+    #
+    # @param data The incoming ROS Image message.
+    #
     def callback(self, data):
         try:
-            frame = self.bridge.imgmsg_to_cv2(data, "bgr8")
+            cv_image = self.bridge.imgmsg_to_cv2(data)
         except CvBridgeError as e:
-            rospy.logerr(f"CvBridge Error: {e}")
+            rospy.logerr(e)
             return
-
-        # Image processing with user's filtering
-        frame_bgr = frame.copy()
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        red_rgb = frame_rgb.copy()
-        red_rgb[:, :, 1] = 0
-        red_rgb[:, :, 2] = 0
-        blue_rgb = frame_rgb.copy()
-        blue_rgb[:, :, 0] = 0
-        blue_rgb[:, :, 1] = 0
-        green_rgb = frame_rgb.copy()
-        green_rgb[:, :, 0] = 0
-        green_rgb[:, :, 2] = 0
-        filtered = (red_rgb.astype(np.float32) + green_rgb.astype(np.float32)) / 2 - blue_rgb.astype(np.float32)
-        filtered = np.clip(filtered, 0, 255).astype(np.uint8)
-        frame_gray = cv2.cvtColor(filtered, cv2.COLOR_RGB2GRAY)
-        blurred_gray = cv2.blur(frame_gray, (5, 5))
-        processed_gray = blurred_gray.copy()
-        processed_gray[processed_gray > self.threshold] = 255
-        processed_gray[processed_gray <= self.threshold] = np.clip(
-            processed_gray[processed_gray <= self.threshold] - self.subtract_constant, 0, 255)
-        subimage = processed_gray[-self.bottom_height:, :]
-        y_rel, x = np.where(subimage < 255)
         
-        # Compute centroid
-        if len(x) > 0:
-            pixel_values = subimage[y_rel, x]
-            weights = 255 - pixel_values
-            self.last_center_x = np.average(x, weights=weights)
-            rospy.loginfo(f"Line center x={self.last_center_x}")
-            error = (self.width / 2) - self.last_center_x
-            self.angular_speed = self.Kp * error
-            self.linear_speed = 0.5  # BASE_SPEED
-        else:
+        center = self.find_center(cv_image)
+        _, w = cv_image.shape[:2]
+        if center is None:
             rospy.logwarn("Line center not found, stopping robot")
             self.angular_speed = 0
             self.linear_speed = 0
+        else:
+            error = (w / 2) - center
+            correction = KP * error
+            self.angular_speed = correction
+            self.linear_speed = BASE_SPEED
 
-        # Draw circle on output frame
-        output_frame = frame.copy()
-        cv2.circle(output_frame, (int(self.last_center_x), int(self.height - self.bottom_height // 2)), 
-                   max(1, int(self.radius)), (0, 0, 255), -1)
-
-        # Display image
-        cv2.imshow("Image window", output_frame)
-        cv2.waitKey(3)
-
-        # Publish processed image
-        try:
-            self.image_pub.publish(self.bridge.cv2_to_imgmsg(output_frame, "bgr8"))
-        except CvBridgeError as e:
-            rospy.logerr(f"CvBridge Error: {e}")
-
-        # Publish velocity command
-        self.move.linear.x = self.linear_speed
         self.move.angular.z = self.angular_speed
-        rospy.loginfo(f"Published linear speed: {self.linear_speed}, angular: {self.angular_speed}")
-        self.cmd_vel_pub.publish(self.move)
+        self.move.linear.x = self.linear_speed
+        rospy.loginfo(f"The published linear speed {self.linear_speed} and angular {self.angular_speed}")
+        # rospy.loginfo(f"error {error} and image center {w/2}")
+        self.pub.publish(self.move)
+    
+    ##
+    # @brief Finds the x-coordinate of the line center in the image.
+    #
+    # Processes the bottom portion of the image, thresholds it to detect the
+    # line, and computes the centroid using image moments.
+    #
+    # @param frame The OpenCV image (BGR format) from the robot's camera.
+    # @return The x-coordinate of the line center, or None if no line is detected.
+    #
+    def find_center(self, frame):
+        h, _ = frame.shape[:2]
+        start_row = int(h * START_ROW)
+        bottom_region = frame[start_row:, :]
 
-    def shutdown(self):
-        # Stop robot
-        self.cmd_vel_pub.publish(Twist())
-        cv2.destroyAllWindows()
+        gray = cv.cvtColor(bottom_region, cv.COLOR_BGR2GRAY)
+        # Binary threshold + invert to make line = white
+        _, img_bin = cv.threshold(gray, 127, 255, cv.THRESH_BINARY)
+        img_inv = cv.bitwise_not(img_bin)
 
+        # Compute centroid
+        M = cv.moments(img_inv)
+        
+        if M["m00"] != 0:
+            cx = int(M["m10"] / M["m00"])
+            rospy.loginfo(f"Line center x={cx}")
+            return cx
+        else:
+            rospy.logwarn("No line detected!")
+            return
+
+##
+# @brief Main entry point of the program.
+#
+# Initializes the ROS node, creates a LineFollower object, and enters
+# the ROS spin loop.
+#
 def main():
-    rospy.init_node('image_converter', anonymous=True)
-    ic = ImageConverter()
-    rospy.on_shutdown(ic.shutdown)
-    try:
-        rospy.spin()
-    except KeyboardInterrupt:
-        rospy.loginfo("Shutting down")
+    rospy.init_node('robot_controller')
+    lf = LineFollower()
+    rospy.spin()
 
+##
+# @brief Script entry point.
+#
 if __name__ == '__main__':
     main()
