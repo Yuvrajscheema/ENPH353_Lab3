@@ -8,9 +8,9 @@ from cv_bridge import CvBridge, CvBridgeError
 class ImageConverter:
     def __init__(self):
         # ROS publishers and subscribers
-        self.image_pub = rospy.Publisher("/enph353/camera/processed", Image, queue_size=10)
+        self.image_pub = rospy.Publisher("/rrbot/camera1/processed", Image, queue_size=10)
         self.cmd_vel_pub = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
-        self.image_sub = rospy.Subscriber("/enph353/camera/image_raw", Image, self.callback)
+        self.image_sub = rospy.Subscriber("/rrbot/camera1/image_raw", Image, self.callback)
         self.bridge = CvBridge()
 
         # Line-following parameters
