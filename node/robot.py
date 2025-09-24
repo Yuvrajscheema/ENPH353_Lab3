@@ -15,7 +15,7 @@ Kp = 0.4
 ## Base linear speed of the robot
 BASE_SPEED = 0.5
 
-threshold = 50
+threshold = 70
 subtract_constant = 20
 ##
 # @class LineFollower
@@ -112,6 +112,7 @@ class LineFollower:
             cy = height - bottom_height + np.average(y_rel, weights=weights)
             return int(cx), int(cy)
         else:
+            rospy.loginfo("Couldnt find line")
             return None
 
 def main():
