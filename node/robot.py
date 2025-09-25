@@ -10,7 +10,7 @@ import numpy as np
 START_ROW = 0.80 #: The amount of the upper half that is ignored (%)
 
 ## Proportional control gain for angular correction
-Kp = 0.01
+Kp = 0.011
 
 ## Base linear speed of the robot
 BASE_SPEED = 1.5
@@ -51,11 +51,11 @@ class LineFollower:
         center = self.find_center(cv_image)
         _, w = cv_image.shape[:2]
         if center is None:
-            self.linear_speed = BASE_SPEED * 0.7
+            self.linear_speed = BASE_SPEED * 0.5
 
         else:
             error = (w / 2) - center
-            correction = Kp * error
+            correction = Kp * error 
             self.angular_speed = correction
             self.linear_speed = BASE_SPEED
 
