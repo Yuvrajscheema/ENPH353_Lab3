@@ -10,10 +10,10 @@ import numpy as np
 START_ROW = 0.80 #: The amount of the upper half that is ignored (%)
 
 ## Proportional control gain for angular correction
-Kp = 0.04
+Kp = 0.01
 
 ## Base linear speed of the robot
-BASE_SPEED = 0.5
+BASE_SPEED = 1.5
 
 threshold = 70
 subtract_constant = 20
@@ -38,7 +38,7 @@ class LineFollower:
         self.bridge = CvBridge()
         self.move = Twist()
         self.linear_speed = BASE_SPEED
-        self.angular_speed = 0
+        self.angular_speed = 1
         
 
     def callback(self, data):
@@ -51,8 +51,8 @@ class LineFollower:
         center = self.find_center(cv_image)
         _, w = cv_image.shape[:2]
         if center is None:
-            self.angular_speed = 1
-            self.linear_speed = 0
+            self.linear_speed = BASE_SPEED * 0.7
+
         else:
             error = (w / 2) - center
             correction = Kp * error
