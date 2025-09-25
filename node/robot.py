@@ -1,5 +1,5 @@
 #!/bin/env python3
-/**
+"""!
  * @file line_follower.py
  * @brief A ROS node for a robot to follow a line using camera feedback.
  *
@@ -16,7 +16,7 @@
  * @see http://wiki.ros.org/cv_bridge
  * @see http://wiki.ros.org/sensor_msgs
  * @see http://wiki.ros.org/geometry_msgs
- */
+ """
 import rospy
 from cv_bridge import CvBridge, CvBridgeError
 import cv2 as cv
@@ -27,9 +27,8 @@ import numpy as np
 # Global constants for the line follower logic.
 # These values can be tuned for better performance in different environments.
 
-#: Proportional gain for the line following controller.
-#: A higher value increases the aggressiveness of the steering correction.
-Kp = 0.01
+Kp = 0.011
+
 
 #: The base linear speed of the robot when following the line.
 BASE_SPEED = 1.5
@@ -93,8 +92,7 @@ class LineFollower:
         else:
             # Calculate the error based on the line's center relative to the image's center.
             error = (w / 2) - center
-            # Apply proportional control to calculate the steering correction.
-            correction = Kp * error
+            correction = Kp * error 
             self.angular_speed = correction
             self.linear_speed = BASE_SPEED
 
