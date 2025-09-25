@@ -109,8 +109,7 @@ class LineFollower:
             pixel_values = subimage[y_rel, x]
             weights = 255 - pixel_values
             cx = np.average(x, weights=weights)
-            cy = height - bottom_height + np.average(y_rel, weights=weights)
-            return int(cx), int(cy)
+            return int(cx)
         else:
             rospy.loginfo("Couldnt find line")
             return None
