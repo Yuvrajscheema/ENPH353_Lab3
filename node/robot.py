@@ -10,7 +10,7 @@ import numpy as np
 START_ROW = 0.80 #: The amount of the upper half that is ignored (%)
 
 ## Proportional control gain for angular correction
-Kp = 0.4
+Kp = 0.04
 
 ## Base linear speed of the robot
 BASE_SPEED = 0.5
@@ -68,7 +68,7 @@ class LineFollower:
 
     def find_center(self, frame):
         height, width = frame.shape[:2]
-        bottom_height = int(0.2 * height)
+        bottom_height = int(0.3 * height)
 
         # Convert to RGB and separate channels
         frame_rgb = cv.cvtColor(frame, cv.COLOR_BGR2RGB)
